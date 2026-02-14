@@ -17,13 +17,16 @@ REQUEST_COUNT = Counter(
 
 # TODO: How would you track rejection metrics for observability?
 # Consider: What information would operators need when debugging rejection spikes?
-# TASK3 ANS: Metrics I added to help an on-call engineer including:
-# 1. agent_request_latency_seconds (existing) : Request latency histogram, already grouped by prompt_version, route.
-#    - Reason : Prompt design affects latency (e.g. chain-of-thought can be slower than direct reply). Grouping by prompt_version lets on-call see which version is slow and debug or compare. Also supports further analysis (e.g. p95 by version).
-# 2. agent_rejections_total : This metric counts total requests rejected by the agent, grouped by prompt_version, route, reason.
-#    - Reason : Lets on-call see not only that rejections spiked but why—each rejection is labeled by cause (prompt_injection, secrets_request, dangerous_action). So you can tell whether a spike is from abuse attempts or risky input, and triage or escalate accordingly.
-# 3. agent_http_errors_total : This metric counts HTTP error responses only (4xx, 5xx), grouped by route, status_code. No prompt_version—errors are about request/server, not prompt.
-#    - Reason : On-call sees only "what broke"—client errors (400) vs server errors (500). Name makes it clear this is for errors, not all responses.
+# TASK3 ANS: Metrics I added so an on-call engineer can (1) detect problems before users report,
+# (2) debug issues quickly when they occur, and (3) understand system behavior and trends:
+# 1. agent_request_latency_seconds (existing) : Request latency histogram by prompt_version, route.
+#    - Reason : (1) Alert on p95 > threshold to catch slowness before users complain. (2) Filter by route/version to see which part is slow. (3) Compare latency over time or across prompt versions.
+# 2. agent_rejections_total : Total requests rejected by the agent, by prompt_version, route, reason.
+#    - Reason : (1) Alert on rejection spike to spot abuse or misconfig early. (2) reason label tells why and speeds triage. (3) rate() by reason/version for trends.
+# 3. agent_http_errors_total : HTTP error responses (4xx, 5xx only), by route, status_code.
+#    - Reason : (1) Alert on error rate to detect outages before user reports. (2) status_code and route narrow down root cause. (3) Track error rate over time.
+# 4. agent_success_total : Total successful (200, not rejected) responses, by prompt_version, route.
+#    - Reason : (1) success_rate = success/requests lets you alert when success rate drops. (2) With other metrics, confirms which route/version is healthy. (3) Compare success rate across versions and over time.
 
 REJECTIONS_TOTAL = Counter(
     'agent_rejections_total',
@@ -35,6 +38,12 @@ HTTP_ERRORS_TOTAL = Counter(
     'agent_http_errors_total',
     'Total HTTP error responses by status code (4xx, 5xx only)',
     ['route', 'status_code']
+)
+
+SUCCESS_TOTAL = Counter(
+    'agent_success_total',
+    'Total successful (200, not rejected) responses',
+    ['prompt_version', 'route']
 )
 
 REQUEST_LATENCY = Histogram(
@@ -143,6 +152,7 @@ def ask():
                 'answer': f"I cannot process this request due to: {reason}"
             }
         else:
+            SUCCESS_TOTAL.labels(prompt_version=PROMPT_VERSION, route='/ask').inc()
             response = {
                 'rejected': False,
                 'reason': None,
