@@ -17,8 +17,10 @@ REQUEST_COUNT = Counter(
 
 # TODO: How would you track rejection metrics for observability?
 # Consider: What information would operators need when debugging rejection spikes?
-# Rejection counter by reason: enables rejection rate and "rejections by reason" in
-# dashboards/alerts; reason label supports triage (prompt_injection vs secrets_request etc).
+# TASK3 ANS: Metrics I added to help an on-call engineer including:
+# 1. agent_rejections_total : This metric counts total requests rejected by the agent, grouped by prompt_version, route, reason.
+#    - Reason : Lets on-call see not only that rejections spiked but why—each rejection is labeled by cause (prompt_injection, secrets_request, dangerous_action). So you can tell whether a spike is from abuse attempts or risky input, and triage or escalate accordingly.
+
 REJECTIONS_TOTAL = Counter(
     'agent_rejections_total',
     'Total number of requests rejected by the agent',
