@@ -17,6 +17,13 @@ REQUEST_COUNT = Counter(
 
 # TODO: How would you track rejection metrics for observability?
 # Consider: What information would operators need when debugging rejection spikes?
+# Rejection counter by reason: enables rejection rate and "rejections by reason" in
+# dashboards/alerts; reason label supports triage (prompt_injection vs secrets_request etc).
+REJECTIONS_TOTAL = Counter(
+    'agent_rejections_total',
+    'Total number of requests rejected by the agent',
+    ['prompt_version', 'route', 'reason']
+)
 
 REQUEST_LATENCY = Histogram(
     'agent_request_latency_seconds',
@@ -102,6 +109,7 @@ def ask():
     try:
         data = request.get_json()
         if not data or 'message' not in data:
+            REJECTIONS_TOTAL.labels(prompt_version=PROMPT_VERSION, route='/ask', reason='invalid_request').inc()
             return jsonify({
                 'error': 'Missing required field: message',
                 'rejected': True,
@@ -115,6 +123,7 @@ def ask():
         
         if rejected:
             # TODO: Implement rejection tracking here
+            REJECTIONS_TOTAL.labels(prompt_version=PROMPT_VERSION, route='/ask', reason=reason).inc()
             response = {
                 'rejected': True,
                 'reason': reason,
