@@ -20,11 +20,20 @@ REQUEST_COUNT = Counter(
 # TASK3 ANS: Metrics I added to help an on-call engineer including:
 # 1. agent_rejections_total : This metric counts total requests rejected by the agent, grouped by prompt_version, route, reason.
 #    - Reason : Lets on-call see not only that rejections spiked but why—each rejection is labeled by cause (prompt_injection, secrets_request, dangerous_action). So you can tell whether a spike is from abuse attempts or risky input, and triage or escalate accordingly.
+# 2. agent_http_errors_total : This metric counts HTTP error responses only (4xx, 5xx), grouped by route, status_code. No prompt_version—errors are about request/server, not prompt.
+#    - Reason : On-call sees only "what broke"—client errors (400) vs server errors (500). Name makes it clear this is for errors, not all responses.
 
 REJECTIONS_TOTAL = Counter(
     'agent_rejections_total',
     'Total number of requests rejected by the agent',
     ['prompt_version', 'route', 'reason']
+)
+
+# HTTP errors only (4xx, 5xx). No prompt_version—errors are request/server related, not prompt.
+HTTP_ERRORS_TOTAL = Counter(
+    'agent_http_errors_total',
+    'Total HTTP error responses by status code (4xx, 5xx only)',
+    ['route', 'status_code']
 )
 
 REQUEST_LATENCY = Histogram(
@@ -111,7 +120,7 @@ def ask():
     try:
         data = request.get_json()
         if not data or 'message' not in data:
-            REJECTIONS_TOTAL.labels(prompt_version=PROMPT_VERSION, route='/ask', reason='invalid_request').inc()
+            HTTP_ERRORS_TOTAL.labels(route='/ask', status_code='400').inc()
             return jsonify({
                 'error': 'Missing required field: message',
                 'rejected': True,
@@ -141,6 +150,10 @@ def ask():
             }
         
         return jsonify(response), 200
+    
+    except Exception:
+        HTTP_ERRORS_TOTAL.labels(route='/ask', status_code='500').inc()
+        return jsonify({'error': 'Internal server error', 'rejected': True}), 500
     
     finally:
         latency = time.time() - start_time
