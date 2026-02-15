@@ -73,7 +73,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 0
+        "y": 4
       },
       "id": 1,
       "options": {
@@ -109,7 +109,8 @@
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
-      "description": "TODO: This panel should help operators understand rejection behavior. Consider what dimensions are useful for debugging.",
+      "description": "Rejection rate over 5m (rejections / requests).",
+      "TASK4_ANS_justify": "Uses ratio so operators see sustained rejection rate.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -174,8 +175,8 @@
       "gridPos": {
         "h": 8,
         "w": 12,
-        "x": 12,
-        "y": 0
+        "x": 0,
+        "y": 12
       },
       "id": 2,
       "options": {
@@ -197,13 +198,13 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "vector(0)",
-          "legendFormat": "TODO: Implement rejection rate query",
+          "expr": "sum(rate(agent_rejections_total[5m])) / sum(rate(agent_requests_total[5m]))",
+          "legendFormat": "rejection rate",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Rejection Rate (TODO: FIX THIS PANEL)",
+      "title": "Rejection Rate",
       "type": "timeseries"
     },
     {
@@ -242,7 +243,7 @@
             "spanNulls": false,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "normal"
             },
             "thresholdsStyle": {
               "mode": "off"
@@ -268,17 +269,86 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
+        "w": 8,
+        "x": 12,
+        "y": 12
       },
       "id": 3,
       "options": {
         "legend": {
-          "calcs": [],
+          "calcs": ["last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "description": "Stacked rejection rate per reason. Band height shows relative proportion & total height shows combined rate.",
+      "TASK4_ANS_justify": "Stacked area lets on-call see both total rejection volume and which reason dominates at each point in time. Legend shows current rate per reason.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum by (reason) (rate(agent_rejections_total[5m]))",
+          "legendFormat": "{{reason}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Rejections by Reason (Trend)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 20,
+        "y": 12
+      },
+      "id": 13,
+      "description": "Rejection share by reason over selected time range.",
+      "TASK4_ANS_justify": "Pie chart gives instant % breakdown of rejection reasons. Let the on-call engineer see the reason for the rejection at a glance.",
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true,
+          "values": ["percent"]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
         },
         "tooltip": {
           "mode": "single",
@@ -292,14 +362,15 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "vector(0)",
-          "legendFormat": "TODO",
+          "expr": "sum by (reason) (increase(agent_rejections_total[$__range]))",
+          "legendFormat": "{{reason}}",
+          "instant": false,
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Rejections by Reason (TODO: FIX)",
-      "type": "timeseries"
+      "title": "Rejection Breakdown",
+      "type": "piechart"
     },
     {
       "datasource": {
@@ -365,7 +436,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 8
+        "y": 4
       },
       "id": 4,
       "options": {
@@ -388,7 +459,7 @@
           },
           "editorMode": "code",
           "expr": "histogram_quantile(0.95, rate(agent_request_latency_seconds_bucket{route=\"/ask\"}[5m]))",
-          "legendFormat": "p95 {{prompt_version}}",
+          "legendFormat": "p95 | prompt version: {{prompt_version}}",
           "range": true,
           "refId": "A"
         },
@@ -400,7 +471,7 @@
           "editorMode": "code",
           "expr": "histogram_quantile(0.50, rate(agent_request_latency_seconds_bucket{route=\"/ask\"}[5m]))",
           "hide": false,
-          "legendFormat": "p50 {{prompt_version}}",
+          "legendFormat": "p50 | prompt version: {{prompt_version}}",
           "range": true,
           "refId": "B"
         }
@@ -442,11 +513,13 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 16
+        "w": 4,
+        "x": 8,
+        "y": 0
       },
       "id": 5,
+      "description": "Overall rejection rate (rejections/requests) over 5m.",
+      "TASK4_ANS_justify": "Ratio so operators see sustained rejection rate. Aligns with HighRejectionRate alert threshold.",
       "options": {
         "colorMode": "value",
         "graphMode": "area",
@@ -466,13 +539,13 @@
             "uid": "PBFA97CFB590B2093"
           },
           "editorMode": "code",
-          "expr": "vector(0)",
-          "legendFormat": "TODO",
+          "expr": "sum(rate(agent_rejections_total[5m])) / sum(rate(agent_requests_total[5m]))",
+          "legendFormat": "__auto",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Overall Rejection Rate (TODO: FIX)",
+      "title": "Overall Rejection Rate",
       "type": "stat"
     },
     {
@@ -501,9 +574,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 16
+        "w": 4,
+        "x": 12,
+        "y": 0
       },
       "id": 6,
       "options": {
@@ -560,9 +633,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 16
+        "w": 4,
+        "x": 16,
+        "y": 0
       },
       "id": 7,
       "options": {
@@ -645,9 +718,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 16
+        "w": 4,
+        "x": 0,
+        "y": 0
       },
       "id": 8,
       "options": {
@@ -708,9 +781,9 @@
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 0,
-        "y": 20
+        "w": 4,
+        "x": 20,
+        "y": 0
       },
       "id": 9,
       "options": {
@@ -738,8 +811,271 @@
           "refId": "A"
         }
       ],
-      "title": "HTTP Errors",
+      "title": "Total HTTP Errors",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.92
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "id": 10,
+      "description": "Success rate: successful responses / total requests over 5m.",
+      "TASK4_ANS_justify": "Top-level health signal. Thresholds mirror Rejection Rate panel: green >=95% (rej<5%), yellow 92-95% (rej 5-8%), red <92% (rej>8%). Consistent thresholds across panels reduce cognitive load for on-call.",
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(agent_success_total{route=\"/ask\"}[5m])) / sum(rate(agent_requests_total{route=\"/ask\"}[5m]))",
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Success Rate",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.95
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "id": 11,
+      "description": "Success rate over time: ratio of successful (non-rejected, 200) responses to total requests.",
+      "TASK4_ANS_justify": "Trend line of success rate lets operators see degradation over time and correlate with deployments. Threshold line at 95% matches alerting strategy. Uses agent_success_total from Task 3.",
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last", "min"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(agent_success_total{route=\"/ask\"}[5m])) / sum(rate(agent_requests_total{route=\"/ask\"}[5m]))",
+          "legendFormat": "success rate",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Success Rate Over Time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "id": 12,
+      "description": "HTTP error rate by status code over 5m (4xx, 5xx).",
+      "TASK4_ANS_justify": "Breaks errors down by status_code so operators can distinguish client errors (4xx) from server errors (5xx). Correlates with HighErrorRate alert. Uses agent_http_errors_total from Task 3.",
+      "options": {
+        "legend": {
+          "calcs": ["mean", "last", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "editorMode": "code",
+          "expr": "rate(agent_http_errors_total[5m])",
+          "legendFormat": "{{status_code}} - {{route}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Error Rate by Status Code",
+      "type": "timeseries"
     }
   ],
   "refresh": "5s",
