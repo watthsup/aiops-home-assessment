@@ -8,6 +8,7 @@ from urllib3.util.retry import Retry
 TARGET_URL = os.environ.get('TARGET_URL', 'http://localhost:8080')
 REQUEST_INTERVAL_MS = int(os.environ.get('REQUEST_INTERVAL_MS', 500))
 REJECTION_MIX_RATIO = float(os.environ.get('REJECTION_MIX_RATIO', 0.15))
+ERROR_MIX_RATIO = float(os.environ.get('ERROR_MIX_RATIO', 0.05))
 
 # Normal messages that should be accepted
 NORMAL_MESSAGES = [
@@ -109,6 +110,7 @@ def main():
     print(f"  Target URL: {TARGET_URL}")
     print(f"  Request interval: {REQUEST_INTERVAL_MS}ms")
     print(f"  Rejection mix ratio: {REJECTION_MIX_RATIO}")
+    print(f"  Error mix ratio: {ERROR_MIX_RATIO}")
     
     session = create_session_with_retries()
     
@@ -118,35 +120,75 @@ def main():
     
     request_count = 0
     rejection_count = 0
+    error_count = 0
     
     print("Starting continuous traffic generation...")
     
     while True:
         try:
-            message = get_random_message()
-            
-            response = session.post(
-                f"{TARGET_URL}/ask",
-                json={"message": message},
-                timeout=10
-            )
-            
-            request_count += 1
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('rejected'):
-                    rejection_count += 1
-                    status = f"REJECTED ({data.get('reason')})"
-                else:
-                    status = "ACCEPTED"
-            else:
+            # Occasionally send malformed requests to trigger HTTP errors
+            if random.random() < ERROR_MIX_RATIO:
+                error_type = random.choice([
+                    'empty_body',       # 400 — missing message field
+                    'missing_field',    # 400 — wrong field name
+                    'bad_content_type', # 400 — non-JSON body
+                    'bad_type_500',     # 500 — message is not a string, crashes .lower()
+                ])
+                if error_type == 'empty_body':
+                    response = session.post(
+                        f"{TARGET_URL}/ask",
+                        json={},
+                        timeout=10
+                    )
+                elif error_type == 'missing_field':
+                    response = session.post(
+                        f"{TARGET_URL}/ask",
+                        json={"not_message": "this field is wrong"},
+                        timeout=10
+                    )
+                elif error_type == 'bad_content_type':
+                    response = session.post(
+                        f"{TARGET_URL}/ask",
+                        data="not json",
+                        headers={"Content-Type": "text/plain"},
+                        timeout=10
+                    )
+                else:  # bad_type_500 — triggers AttributeError in classify_rejection
+                    response = session.post(
+                        f"{TARGET_URL}/ask",
+                        json={"message": random.choice([12345, ["a", "b"], None])},
+                        timeout=10
+                    )
+                request_count += 1
+                error_count += 1
                 status = f"ERROR ({response.status_code})"
+            else:
+                message = get_random_message()
+                
+                response = session.post(
+                    f"{TARGET_URL}/ask",
+                    json={"message": message},
+                    timeout=10
+                )
+                
+                request_count += 1
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('rejected'):
+                        rejection_count += 1
+                        status = f"REJECTED ({data.get('reason')})"
+                    else:
+                        status = "ACCEPTED"
+                else:
+                    error_count += 1
+                    status = f"ERROR ({response.status_code})"
             
             # Log every 10th request to avoid too much output
             if request_count % 10 == 0:
-                rate = (rejection_count / request_count) * 100 if request_count > 0 else 0
-                print(f"[{request_count}] Rejection rate: {rate:.1f}% ({rejection_count}/{request_count})")
+                rej_rate = (rejection_count / request_count) * 100 if request_count > 0 else 0
+                err_rate = (error_count / request_count) * 100 if request_count > 0 else 0
+                print(f"[{request_count}] Rejection: {rej_rate:.1f}% ({rejection_count}/{request_count}) | Errors: {err_rate:.1f}% ({error_count}/{request_count})")
             
         except requests.exceptions.RequestException as e:
             print(f"Request failed: {e}")
