@@ -31,6 +31,7 @@ services:
       - TARGET_URL=http://agent-api:8080
       - REQUEST_INTERVAL_MS=${REQUEST_INTERVAL_MS:-500}
       - REJECTION_MIX_RATIO=${REJECTION_MIX_RATIO:-0.15}
+      - ERROR_MIX_RATIO=${ERROR_MIX_RATIO:-0.05}
     depends_on:
       agent-api:
         condition: service_healthy
