@@ -109,7 +109,7 @@ jobs:
           TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           if ! grep -q "image_tag: \"$SHA\"" deployment/manifest.yml; then
             sed -i "s/image_tag: \".*\"/image_tag: \"$SHA\"/" deployment/manifest.yml
-            sed -i "s/# | (will be populated by CD pipeline)  |/# | $TS | ${SHA:0:7} | github-actions |/" deployment/manifest.yml
+            sed -i "$ i\\# | $TS | ${SHA:0:7} | github-actions |" deployment/manifest.yml
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add deployment/manifest.yml
