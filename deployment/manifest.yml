@@ -22,7 +22,7 @@ spec:
   container:
     name: agent-api
     # TODO: This should be updated by the CD pipeline
-    image_tag: "4a266c1f890866b7522a2da583618a3b22db944d"
+    image_tag: "0ea63b9cfe30319a7d877796b0da772a5bb1b225"
     port: 8080
     
     env:
@@ -44,4 +44,5 @@ spec:
 # -------------------------------------------------------------
 # | 2026-02-15T07:47:58Z | dd05954 | github-actions |
 # | 2026-02-15T18:42:42Z | 4a266c1 | github-actions |
+# | 2026-02-17T08:43:34Z | 0ea63b9 | github-actions |
 # -------------------------------------------------------------
