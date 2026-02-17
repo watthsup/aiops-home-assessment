@@ -1,3 +1,23 @@
+# TASK2 ANS: Overview
+# ****************
+# NOTE: I alredy ran the stack and observed rejection ~13%, error ~5%, latency ~4-5ms (default config).
+# However, rejection and error rates are driven by configurable generator ratios (e.g., REJECTION_MIX_RATIO)
+# Thus, changing them changes the observed numbers, so I think they cannot be used as baselines.
+# Thresholds below are derived from eval gate analysis, API SLA, and acceptable failure rates which will be explained in the individual sections.
+# ****************
+# 1. Problem vs normal:
+#    - Problem: rejection >8% (attack/classifier broken), HTTP error >2% (server/integration fail),
+#      p95 >500ms (degradation), API down (outage), rejection spike >2x baseline (sudden shift).
+#    - Normal: rejection <8%, errors <2%, p95 <500ms, API up.
+#    - 5%/8% thresholds are consistent across dashboard, eval gate, and alerts:
+#      5% = eval gate false positive ceiling (MAX_GOLDEN_REJECTION_RATE) = dashboard yellow.
+#      8% = false positives (~5%) + real-world adversarial (~2-3%) = dashboard red = alert fires.
+# 2. Avoiding alert fatigue:
+#    - 'for: 5m' filters out small temporary changes. Min-traffic guard (>0.01) avoids noise when idle.
+#    - RejectionRateSpike uses relative 2x comparison ==> adapts without manual tuning.
+# 3. On-call info:
+#    - summary = what is wrong. description = PromQL triage query + what to investigate.
+
 groups:
   - name: agent-api-alerts
     rules:
@@ -15,23 +35,125 @@ groups:
       #           How do you distinguish a real problem from noise?
       # 
       # Observe the running system before setting thresholds.
+      #
+      # TASK2 ANS:
+      #   Threshold: >8% rejection rate sustained 5m.
+      #   Reasoning: Eval runner is the designated quality gate (no instruction to modify its thresholds),
+      #     so MAX_GOLDEN_REJECTION_RATE=0.05 reflects an agreed acceptable false positive rate, 
+      #     meaning the classifier alone may produce up to ~5% rejections from real traffic.
+      #     Add ~2-3% real-world adversarial traffic => Thus, 8% is the upper bound of "normal".
+      #     Above 8% sustained => coordinated attack, abuse surge, or broken classifier.
+      #     In order to avoid alert fatigue, 'for: 5m' filters out small temporary changes & min-traffic guard (>0.01) avoids noise when idle.
+      #   On-call: break down by (reason) => identify if prompt_injection, secrets_request, or dangerous_action is driving the rejections.
       - alert: HighRejectionRate
-        expr: vector(0) > 1
+        expr: |
+          (
+            sum(rate(agent_rejections_total[5m])) by (job)
+            / sum(rate(agent_requests_total[5m])) by (job)
+          ) > 0.08
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "TODO"
-          description: "TODO"
+          # summary: "TODO"
+          # description: "TODO"
+          summary: "High rejection rate on agent API (>8% for 5m)"
+          description: >-
+            Rejection rate exceeded 8% (dashboard red zone) for 5 minutes.
+            This indicates a coordinated attack, abuse pattern, or broken classifier.
+            Triage: run rate(agent_rejections_total[5m]) by (reason) to see which reason is driving rejections.
 
       # TODO: Implement alerting for sudden changes in rejection behavior
       # Consider: What constitutes a "spike" vs normal variance?
       #           How do you compare current behavior to baseline?
+      #
+      # TASK2 ANS:
+      #   Threshold: current 5m rejection rate >2x the 1h-ago baseline, sustained 5m.
+      #   Reasoning: Catches sudden shifts even below the 8% red-zone (e.g., 2%→5% = something changed).
+      #     Why 1h baseline: short enough to reflect current traffic pattern, long enough to smooth the variance krub
+      #     noise.
+      #     However, If attack ramps slowly over 1h, this alert won't catch it => but HighRejectionRate (>8%) will.
+      #     The two alerts complement each other: fixed threshold + relative change.
+      #     'for: 5m' + min-traffic guard avoids noise.
+      #   On-call: check by (reason) now vs 1h ago to determine cause:
+      #     - If a specific reason spiked (e.g., prompt_injection) => likely attack or new abuse pattern.
+      #     - If all reasons increased proportionally => check if prompt_version changed (classifier update
+      #       may have increased false positives).
       - alert: RejectionRateSpike
-        expr: vector(0) > 1
+        expr: |
+          (
+            sum(rate(agent_rejections_total[5m])) by (job)
+            / sum(rate(agent_requests_total[5m])) by (job)
+          ) > 2 * (
+            sum(rate(agent_rejections_total[1h] offset 5m)) by (job)
+            / sum(rate(agent_requests_total[1h] offset 5m)) by (job)
+          )
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "TODO"
-          description: "TODO"
+          summary: "Rejection rate spike on agent API (>2x recent baseline)"
+          description: >-
+            Current 5m rejection rate is more than 2x the 1-hour-ago baseline.
+            Triage: compare rate(agent_rejections_total[5m]) by (reason) now vs 1h ago.
+            Check if a new prompt_version was deployed or if attack pattern changed.
+
+      # TASK2 ANS:
+      #   Threshold: >2% HTTP error rate sustained 5m.
+      #   Reasoning: Unlike rejection rate, there is no eval gate to define this threshold.
+      #     In production, properly integrated clients send valid JSON thus errors should be rare.
+      #     Occasional failures (network glitch, edge-case input, transient bug) are expected,
+      #     but from my view 2% sustained (1 in 50 requests for 5m) is not >>occasional<<. 
+      #     It signals a real issue: broken caller or middleware (4xx at scale), app bug (5xx), or dependency outage.
+      #     'for: 5m' + min-traffic guard avoids noise from one-off errors.
+      #   On-call: break down by (status_code, route):
+      #     - 4xx dominant => client/integration issue (check caller logs, API contract changes).
+      #     - 5xx dominant => server-side bug or dependency failure (check app logs for stack traces).
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(agent_http_errors_total[5m])) by (job)
+            / sum(rate(agent_requests_total[5m])) by (job)
+          ) > 0.02
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate on agent API (>2% for 5m)"
+          description: >-
+            Error rate exceeded 2% for 5 minutes. Production errors should be near 0%.
+            Triage: run rate(agent_http_errors_total[5m]) by (status_code, route) to distinguish
+            client errors (4xx) from server errors (5xx). Check app logs for stack traces on 500s.
+
+      # TASK2 ANS:
+      #   Threshold: p95 >500ms sustained 5m.
+      #   Reasoning: Observed synthetic latency is ~4-5ms (fake responses), not representative of real
+      #     model inference. Btw, 500ms is a common API SLA for AI agents calling LLMs. Sustained p95 >500ms
+      #     means 5% of users wait over half a second which can infer to degraded UX.
+      #     Note: in a real system we would also track TTFT (Time To First Token) for streaming responses,
+      #     which better reflects perceived latency. Current setup only measures total response time.
+      #     'for: 5m' + min-traffic guard avoids noise.
+      #   On-call: break down by (route) and (prompt_version):
+      #     - Specific route slow => endpoint-level issue (e.g., /ask has heavier processing).
+      #     - New prompt_version correlates with latency increase => prompt change may be the cause (e.g. CoT prompt).
+      #     - All routes slow => check host CPU/memory, downstream dependencies.
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(agent_request_latency_seconds_bucket[5m])) by (le, job)
+          ) > 0.5
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          # summary: "TODO"
+          # description: "TODO"
+          summary: "High latency on agent API (p95 >500ms for 5m)"
+          description: >-
+            p95 latency exceeded 500ms for 5 minutes. Observed baseline is ~4-5ms with synthetic responses.
+            Triage: run histogram_quantile(0.95, rate(agent_request_latency_seconds_bucket[5m])) by (route)
+            to identify which route is slow. Check resource usage (CPU, memory) on the host.
