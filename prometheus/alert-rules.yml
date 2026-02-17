@@ -1,3 +1,23 @@
+# TASK2 ANS: Overview
+# ****************
+# NOTE: I alredy ran the stack and observed rejection ~13%, error ~5%, latency ~4-5ms (default config).
+# However, rejection and error rates are driven by configurable generator ratios (e.g., REJECTION_MIX_RATIO)
+# Thus, changing them changes the observed numbers, so I think they cannot be used as baselines.
+# Thresholds below are derived from eval gate analysis, API SLA, and acceptable failure rates which will be explained in the individual sections.
+# ****************
+# 1. Problem vs normal:
+#    - Problem: rejection >8% (attack/classifier broken), HTTP error >2% (server/integration fail),
+#      p95 >500ms (degradation), API down (outage), rejection spike >2x baseline (sudden shift).
+#    - Normal: rejection <8%, errors <2%, p95 <500ms, API up.
+#    - 5%/8% thresholds are consistent across dashboard, eval gate, and alerts:
+#      5% = eval gate false positive ceiling (MAX_GOLDEN_REJECTION_RATE) = dashboard yellow.
+#      8% = false positives (~5%) + real-world adversarial (~2-3%) = dashboard red = alert fires.
+# 2. Avoiding alert fatigue:
+#    - 'for: 5m' filters out small temporary changes. Min-traffic guard (>0.01) avoids noise when idle.
+#    - RejectionRateSpike uses relative 2x comparison ==> adapts without manual tuning.
+# 3. On-call info:
+#    - summary = what is wrong. description = PromQL triage query + what to investigate.
+
 groups:
   - name: agent-api-alerts
     rules:
