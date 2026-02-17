@@ -79,3 +79,31 @@ groups:
             Current 5m rejection rate is more than 2x the 1-hour-ago baseline.
             Triage: compare rate(agent_rejections_total[5m]) by (reason) now vs 1h ago.
             Check if a new prompt_version was deployed or if attack pattern changed.
+            
+      # TASK2 ANS:
+      #   Threshold: >2% HTTP error rate sustained 5m.
+      #   Reasoning: Unlike rejection rate, there is no eval gate to define this threshold.
+      #     In production, properly integrated clients send valid JSON thus errors should be rare.
+      #     Occasional failures (network glitch, edge-case input, transient bug) are expected,
+      #     but from my view 2% sustained (1 in 50 requests for 5m) is not >>occasional<<. It signals
+      #     a real issue: broken caller or middleware (4xx at scale), app bug (5xx), or dependency outage.
+      #     'for: 5m' + min-traffic guard avoids noise from one-off errors.
+      #   On-call: break down by (status_code, route):
+      #     - 4xx dominant => client/integration issue (check caller logs, API contract changes).
+      #     - 5xx dominant => server-side bug or dependency failure (check app logs for stack traces).
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(agent_http_errors_total[5m])) by (job)
+            / sum(rate(agent_requests_total[5m])) by (job)
+          ) > 0.02
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate on agent API (>2% for 5m)"
+          description: >-
+            Error rate exceeded 2% for 5 minutes. Production errors should be near 0%.
+            Triage: run rate(agent_http_errors_total[5m]) by (status_code, route) to distinguish
+            client errors (4xx) from server errors (5xx). Check app logs for stack traces on 500s.
