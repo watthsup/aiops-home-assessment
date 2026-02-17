@@ -47,11 +47,35 @@ groups:
       # TODO: Implement alerting for sudden changes in rejection behavior
       # Consider: What constitutes a "spike" vs normal variance?
       #           How do you compare current behavior to baseline?
+      #
+      # TASK2 ANS:
+      #   Threshold: current 5m rejection rate >2x the 1h-ago baseline, sustained 5m.
+      #   Reasoning: Catches sudden shifts even below the 8% red-zone (e.g., 2%→5% = something changed).
+      #     Why 1h baseline: short enough to reflect current traffic pattern, long enough to smooth the variance krub
+      #     noise.
+      #     However, If attack ramps slowly over 1h, this alert won't catch it => but HighRejectionRate (>8%) will.
+      #     The two alerts complement each other: fixed threshold + relative change.
+      #     'for: 5m' + min-traffic guard avoids noise.
+      #   On-call: check by (reason) now vs 1h ago to determine cause:
+      #     - If a specific reason spiked (e.g., prompt_injection) => likely attack or new abuse pattern.
+      #     - If all reasons increased proportionally => check if prompt_version changed (classifier update
+      #       may have increased false positives).
       - alert: RejectionRateSpike
-        expr: vector(0) > 1
+        expr: |
+          (
+            sum(rate(agent_rejections_total[5m])) by (job)
+            / sum(rate(agent_requests_total[5m])) by (job)
+          ) > 2 * (
+            sum(rate(agent_rejections_total[1h] offset 5m)) by (job)
+            / sum(rate(agent_requests_total[1h] offset 5m)) by (job)
+          )
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "TODO"
-          description: "TODO"
+          summary: "Rejection rate spike on agent API (>2x recent baseline)"
+          description: >-
+            Current 5m rejection rate is more than 2x the 1-hour-ago baseline.
+            Triage: compare rate(agent_rejections_total[5m]) by (reason) now vs 1h ago.
+            Check if a new prompt_version was deployed or if attack pattern changed.
