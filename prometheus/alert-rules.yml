@@ -15,14 +15,34 @@ groups:
       #           How do you distinguish a real problem from noise?
       # 
       # Observe the running system before setting thresholds.
+      #
+      # TASK2 ANS:
+      #   Threshold: >8% rejection rate sustained 5m.
+      #   Reasoning: Eval runner is the designated quality gate (no instruction to modify its thresholds),
+      #     so MAX_GOLDEN_REJECTION_RATE=0.05 reflects an agreed acceptable false positive rate, 
+      #     meaning the classifier alone may produce up to ~5% rejections from real traffic.
+      #     Add ~2-3% real-world adversarial traffic => Thus, 8% is the upper bound of "normal".
+      #     Above 8% sustained => coordinated attack, abuse surge, or broken classifier.
+      #     In order to avoid alert fatigue, 'for: 5m' filters out small temporary changes & min-traffic guard (>0.01) avoids noise when idle.
+      #   On-call: break down by (reason) => identify if prompt_injection, secrets_request, or dangerous_action is driving the rejections.
       - alert: HighRejectionRate
-        expr: vector(0) > 1
+        expr: |
+          (
+            sum(rate(agent_rejections_total[5m])) by (job)
+            / sum(rate(agent_requests_total[5m])) by (job)
+          ) > 0.08
+          and sum(rate(agent_requests_total[5m])) by (job) > 0.01
         for: 5m
         labels:
           severity: warning
         annotations:
-          summary: "TODO"
-          description: "TODO"
+          # summary: "TODO"
+          # description: "TODO"
+          summary: "High rejection rate on agent API (>8% for 5m)"
+          description: >-
+            Rejection rate exceeded 8% (dashboard red zone) for 5 minutes.
+            This indicates a coordinated attack, abuse pattern, or broken classifier.
+            Triage: run rate(agent_rejections_total[5m]) by (reason) to see which reason is driving rejections.
 
       # TODO: Implement alerting for sudden changes in rejection behavior
       # Consider: What constitutes a "spike" vs normal variance?
