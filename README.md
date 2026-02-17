@@ -141,3 +141,17 @@ See [CANDIDATE_INSTRUCTIONS.md](./CANDIDATE_INSTRUCTIONS.md) for the take-home t
 ## For Reviewers
 
 See [GRADING_RUBRIC.md](./GRADING_RUBRIC.md) for evaluation criteria.
+
+## Where to find answers
+
+Most explanations and justifications are written inline as comments using the pattern `TASK{n} ANS`.
+You can search across the repo to jump straight to each task's explanation answer:
+
+
+| Task | File(s) | Search keyword |
+|------|---------|----------------|
+| 1 — CI/CD Pipeline | `.github/workflows/ci.yml` | `TASK1 ANS` |
+| 2 — Alerting Strategy | `prometheus/alert-rules.yml` | `TASK2 ANS` |
+| 3 — Observability Metrics | `agent-api/app.py` | `TASK3 ANS` |
+| 4 — Dashboard | `grafana/dashboards/agent-monitoring.json` | `TASK4_ANS_justify` |
+| 5 — Incident Response | `docs/incident-response.md` | (entire file is the answer) |
